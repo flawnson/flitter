@@ -107,7 +107,7 @@ struct FeedView: View {
                                     await viewModel.deletePost(post)
                                 }
                             } label: {
-                                Label("Delete", systemImage: "trash")
+                                Image(systemName: "trash")
                             }
                         }
                     }
