@@ -5,11 +5,11 @@
 //  Created by Flawnson Tong on 2026-03-30.
 //
 
-
 import SwiftUI
 
 struct FeedView: View {
     @StateObject private var viewModel = FeedViewModel()
+    @FocusState private var isComposerFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -17,6 +17,10 @@ struct FeedView: View {
                 composer
                 Divider()
                 content
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                isComposerFocused = false
             }
             .navigationTitle("Flitter")
             .task {
@@ -42,6 +46,7 @@ struct FeedView: View {
                 .font(.headline)
 
             TextEditor(text: $viewModel.composerText)
+                .focused($isComposerFocused)
                 .frame(minHeight: 120)
                 .padding(8)
                 .overlay(
@@ -59,6 +64,7 @@ struct FeedView: View {
                 Button {
                     Task {
                         await viewModel.submitPost()
+                        isComposerFocused = false
                     }
                 } label: {
                     if viewModel.isPosting {
@@ -68,7 +74,10 @@ struct FeedView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isPosting || viewModel.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(
+                    viewModel.isPosting ||
+                    viewModel.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
             }
         }
         .padding()
@@ -105,6 +114,7 @@ struct FeedView: View {
                             Button(role: .destructive) {
                                 Task {
                                     await viewModel.deletePost(post)
+                                    isComposerFocused = false
                                 }
                             } label: {
                                 Image(systemName: "trash")
@@ -113,6 +123,7 @@ struct FeedView: View {
                     }
                 }
                 .listStyle(.plain)
+                .scrollDismissesKeyboard(.interactively)
             }
         }
     }
