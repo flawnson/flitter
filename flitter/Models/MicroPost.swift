@@ -57,3 +57,8 @@ struct DeletePostResponse: Codable {
     let ok: Bool
     let deleted: Bool
 }
+
+struct UpdatePostResponse: Codable {
+    let ok: Bool
+    let updated: Bool
+}

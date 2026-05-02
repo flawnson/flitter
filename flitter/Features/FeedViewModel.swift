@@ -112,6 +112,31 @@ final class FeedViewModel: ObservableObject {
         await syncAndRefreshPosts(showError: true)
     }
 
+    func updatePost(_ post: MicroPost, body: String) async -> Bool {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !isPendingPost(post) else { return false }
+        guard !trimmed.isEmpty else {
+            errorMessage = "Post is required."
+            return false
+        }
+        guard trimmed.count <= 1000 else {
+            errorMessage = "Post is too long."
+            return false
+        }
+
+        errorMessage = nil
+
+        do {
+            _ = try await api.updatePost(id: post.id, body: trimmed)
+            replacePost(post, body: trimmed)
+            offlineStore.updateCachedPost(id: post.id, body: trimmed)
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     func isPendingPost(_ post: MicroPost) -> Bool {
         offlineStore.pendingCreate(localId: post.id) != nil
     }
@@ -170,6 +195,11 @@ final class FeedViewModel: ObservableObject {
                 throw error
             }
         }
+    }
+
+    private func replacePost(_ post: MicroPost, body: String) {
+        guard let index = posts.firstIndex(where: { $0.id == post.id }) else { return }
+        posts[index] = MicroPost(id: post.id, body: body, createdAt: post.createdAt)
     }
 
     private func updateLastUpdatedText() {

@@ -78,6 +78,15 @@ final class OfflinePostStore {
         defaults.set(Date(), forKey: Keys.lastUpdatedAt)
     }
 
+    func updateCachedPost(id: Int, body: String) {
+        let updatedPosts = cachedPosts().map { post in
+            guard post.id == id else { return post }
+            return MicroPost(id: post.id, body: body, createdAt: post.createdAt)
+        }
+
+        encode(updatedPosts, forKey: Keys.cachedPosts)
+    }
+
     func enqueueCreate(body: String) -> MicroPost {
         let pendingPost = PendingCreatePost(
             localId: nextLocalId(existingPosts: pendingCreates()),
