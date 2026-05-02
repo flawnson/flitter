@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct FeedView: View {
     @StateObject private var viewModel = FeedViewModel()
@@ -99,18 +100,50 @@ struct FeedView: View {
                 )
             } else {
                 List {
+                    if let lastUpdatedText = viewModel.lastUpdatedText {
+                        Text(lastUpdatedText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .listRowSeparator(.hidden)
+                    }
+
                     ForEach(viewModel.posts) { post in
                         VStack(alignment: .leading, spacing: 8) {
                             Text(post.body)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .textSelection(.enabled)
 
-                            Text(post.formattedDate)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            HStack(spacing: 8) {
+                                Text(post.formattedDate)
+                                    .foregroundStyle(.secondary)
+
+                                if let pendingStatus = viewModel.pendingStatusText(for: post) {
+                                    Text(pendingStatus)
+                                        .foregroundStyle(viewModel.hasFailedToSync(post) ? .red : .secondary)
+                                }
+                            }
+                            .font(.caption)
                         }
                         .padding(.vertical, 4)
+                        .contextMenu {
+                            Button("Copy") {
+                                UIPasteboard.general.string = post.body
+                            }
+                        }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if viewModel.hasFailedToSync(post) {
+                                Button {
+                                    Task {
+                                        await viewModel.retryPost(post)
+                                        isComposerFocused = false
+                                    }
+                                } label: {
+                                    Image(systemName: "arrow.clockwise")
+                                }
+                                .tint(.blue)
+                            }
+
                             Button(role: .destructive) {
                                 Task {
                                     await viewModel.deletePost(post)

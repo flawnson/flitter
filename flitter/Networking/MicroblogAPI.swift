@@ -25,7 +25,7 @@ enum APIError: LocalizedError {
 }
 
 final class MicroblogAPI {
-    func fetchPosts(limit: Int = 50) async throws -> [MicroPost] {
+    func fetchPosts(limit: Int = 20) async throws -> [MicroPost] {
         var components = URLComponents(url: AppConfig.baseURL, resolvingAgainstBaseURL: false)
         components?.queryItems = [
             URLQueryItem(name: "limit", value: String(limit))
@@ -42,7 +42,7 @@ final class MicroblogAPI {
         return decoded.posts
     }
 
-    func createPost(body: String) async throws {
+    func createPost(body: String) async throws -> Int {
         var request = URLRequest(url: AppConfig.baseURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -54,7 +54,7 @@ final class MicroblogAPI {
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response: response, data: data)
 
-        _ = try JSONDecoder().decode(CreatePostResponse.self, from: data)
+        return try JSONDecoder().decode(CreatePostResponse.self, from: data).id
     }
 
     func deletePost(id: Int) async throws {
