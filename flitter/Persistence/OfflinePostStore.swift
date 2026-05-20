@@ -22,11 +22,61 @@ struct PendingCreatePost: Codable, Identifiable, Equatable {
     }
 }
 
+struct DraftPost: Codable, Identifiable, Equatable {
+    let id: UUID
+    var body: String
+    let createdAt: Date
+    var updatedAt: Date
+
+    var previewText: String {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Empty draft" : trimmed
+    }
+
+    var formattedUpdatedAt: String {
+        Self.updatedAtFormatter.string(from: updatedAt)
+    }
+
+    private static let updatedAtFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+}
+
+struct ScheduledPost: Codable, Identifiable, Equatable {
+    let id: UUID
+    var body: String
+    var scheduledAt: Date
+    let createdAt: Date
+    var lastError: String?
+
+    var previewText: String {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Empty scheduled post" : trimmed
+    }
+
+    var formattedScheduledAt: String {
+        Self.scheduledAtFormatter.string(from: scheduledAt)
+    }
+
+    private static let scheduledAtFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+}
+
 final class OfflinePostStore {
     private enum Keys {
         static let cachedPosts = "offline.cachedPosts"
         static let pendingCreates = "offline.pendingCreates"
         static let composerDraft = "offline.composerDraft"
+        static let savedDrafts = "offline.savedDrafts"
+        static let activeDraftId = "offline.activeDraftId"
+        static let scheduledPosts = "offline.scheduledPosts"
         static let lastUpdatedAt = "offline.lastUpdatedAt"
     }
 
@@ -67,6 +117,109 @@ final class OfflinePostStore {
 
     func saveComposerDraft(_ draft: String) {
         defaults.set(draft, forKey: Keys.composerDraft)
+    }
+
+    func savedDrafts() -> [DraftPost] {
+        sortedDrafts(decode([DraftPost].self, forKey: Keys.savedDrafts) ?? [])
+    }
+
+    func savedDraft(id: DraftPost.ID) -> DraftPost? {
+        savedDrafts().first { $0.id == id }
+    }
+
+    func activeDraftId() -> DraftPost.ID? {
+        guard let rawId = defaults.string(forKey: Keys.activeDraftId) else { return nil }
+        return UUID(uuidString: rawId)
+    }
+
+    func saveActiveDraftId(_ id: DraftPost.ID?) {
+        if let id {
+            defaults.set(id.uuidString, forKey: Keys.activeDraftId)
+        } else {
+            defaults.removeObject(forKey: Keys.activeDraftId)
+        }
+    }
+
+    func saveDraft(body: String, id: DraftPost.ID? = nil) -> DraftPost {
+        let now = Date()
+        var drafts = savedDrafts()
+
+        if let id, let index = drafts.firstIndex(where: { $0.id == id }) {
+            drafts[index].body = body
+            drafts[index].updatedAt = now
+            encode(sortedDrafts(drafts), forKey: Keys.savedDrafts)
+            return drafts[index]
+        }
+
+        let draft = DraftPost(
+            id: UUID(),
+            body: body,
+            createdAt: now,
+            updatedAt: now
+        )
+
+        drafts.append(draft)
+        encode(sortedDrafts(drafts), forKey: Keys.savedDrafts)
+        return draft
+    }
+
+    func updateSavedDraft(id: DraftPost.ID, body: String) {
+        var drafts = savedDrafts()
+
+        guard let index = drafts.firstIndex(where: { $0.id == id }) else { return }
+        drafts[index].body = body
+        drafts[index].updatedAt = Date()
+        encode(sortedDrafts(drafts), forKey: Keys.savedDrafts)
+    }
+
+    func removeSavedDraft(id: DraftPost.ID) {
+        let drafts = savedDrafts().filter { $0.id != id }
+        encode(drafts, forKey: Keys.savedDrafts)
+
+        if activeDraftId() == id {
+            saveActiveDraftId(nil)
+        }
+    }
+
+    func scheduledPosts() -> [ScheduledPost] {
+        sortedScheduledPosts(decode([ScheduledPost].self, forKey: Keys.scheduledPosts) ?? [])
+    }
+
+    func dueScheduledPosts(now: Date = Date()) -> [ScheduledPost] {
+        scheduledPosts().filter { $0.scheduledAt <= now }
+    }
+
+    func schedulePost(body: String, scheduledAt: Date) -> ScheduledPost {
+        let now = Date()
+        let scheduledPost = ScheduledPost(
+            id: UUID(),
+            body: body,
+            scheduledAt: scheduledAt,
+            createdAt: now,
+            lastError: nil
+        )
+
+        var posts = scheduledPosts()
+        posts.append(scheduledPost)
+        encode(sortedScheduledPosts(posts), forKey: Keys.scheduledPosts)
+        return scheduledPost
+    }
+
+    func removeScheduledPost(id: ScheduledPost.ID) {
+        let posts = scheduledPosts().filter { $0.id != id }
+        encode(posts, forKey: Keys.scheduledPosts)
+    }
+
+    func markScheduledPostFailed(id: ScheduledPost.ID, errorMessage: String?) {
+        var posts = scheduledPosts()
+
+        guard let index = posts.firstIndex(where: { $0.id == id }) else { return }
+        posts[index].lastError = errorMessage
+        encode(sortedScheduledPosts(posts), forKey: Keys.scheduledPosts)
+    }
+
+    func clearScheduledPostFailure(id: ScheduledPost.ID) {
+        markScheduledPostFailed(id: id, errorMessage: nil)
     }
 
     func lastUpdatedAt() -> Date? {
@@ -139,6 +292,26 @@ final class OfflinePostStore {
             return false
         case (nil, nil):
             return lhs.id > rhs.id
+        }
+    }
+
+    private func sortedDrafts(_ drafts: [DraftPost]) -> [DraftPost] {
+        drafts.sorted { lhs, rhs in
+            if lhs.updatedAt == rhs.updatedAt {
+                return lhs.createdAt > rhs.createdAt
+            }
+
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
+
+    private func sortedScheduledPosts(_ scheduledPosts: [ScheduledPost]) -> [ScheduledPost] {
+        scheduledPosts.sorted { lhs, rhs in
+            if lhs.scheduledAt == rhs.scheduledAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+
+            return lhs.scheduledAt < rhs.scheduledAt
         }
     }
 

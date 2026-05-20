@@ -9,9 +9,15 @@ import SwiftUI
 import UIKit
 
 struct FeedView: View {
+    @Environment(\.scenePhase) private var scenePhase
+
     @StateObject private var viewModel = FeedViewModel()
     @State private var isComposerCollapsed = false
     @State private var editingPost: MicroPost?
+    @State private var isShowingDrafts = false
+    @State private var isShowingScheduled = false
+    @State private var isShowingSchedulePost = false
+    @State private var scheduledAt = Date().addingTimeInterval(3600)
     @FocusState private var isComposerFocused: Bool
 
     var body: some View {
@@ -47,6 +53,13 @@ struct FeedView: View {
             .refreshable {
                 await viewModel.loadPosts()
             }
+            .onChange(of: scenePhase) { phase in
+                guard phase == .active else { return }
+
+                Task {
+                    await viewModel.loadPosts()
+                }
+            }
             .alert("Error", isPresented: Binding(
                 get: { viewModel.errorMessage != nil },
                 set: { if !$0 { viewModel.errorMessage = nil } }
@@ -59,6 +72,48 @@ struct FeedView: View {
                 EditPostView(post: post) { body in
                     await viewModel.updatePost(post, body: body)
                 }
+            }
+            .sheet(isPresented: $isShowingDrafts) {
+                DraftsView(
+                    drafts: viewModel.drafts,
+                    activeDraftID: viewModel.activeDraftID,
+                    onSelect: { draft in
+                        viewModel.loadDraft(draft)
+                        isComposerCollapsed = false
+
+                        DispatchQueue.main.async {
+                            isComposerFocused = true
+                        }
+                    },
+                    onDelete: { draft in
+                        viewModel.deleteDraft(draft)
+                    }
+                )
+            }
+            .sheet(isPresented: $isShowingScheduled) {
+                ScheduledPostsView(
+                    scheduledPosts: viewModel.scheduledPosts,
+                    onSelect: { scheduledPost in
+                        viewModel.loadScheduledPost(scheduledPost)
+                        isComposerCollapsed = false
+
+                        DispatchQueue.main.async {
+                            isComposerFocused = true
+                        }
+                    },
+                    onDelete: { scheduledPost in
+                        viewModel.deleteScheduledPost(scheduledPost)
+                    }
+                )
+            }
+            .sheet(isPresented: $isShowingSchedulePost) {
+                SchedulePostView(
+                    bodyText: viewModel.composerText,
+                    defaultScheduledAt: scheduledAt,
+                    onSchedule: { date in
+                        viewModel.scheduleCurrentPost(at: date)
+                    }
+                )
             }
         }
     }
@@ -103,8 +158,29 @@ struct FeedView: View {
 
     private var expandedComposer: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("New post")
-                .font(.headline)
+            HStack {
+                Text(viewModel.activeDraftID == nil ? "New post" : "Draft")
+                    .font(.headline)
+
+                Spacer()
+
+                Button {
+                    isShowingDrafts = true
+                } label: {
+                    Label(viewModel.draftsButtonTitle, systemImage: "tray")
+                }
+                .font(.subheadline)
+                .buttonStyle(.borderless)
+
+                Button {
+                    isShowingScheduled = true
+                } label: {
+                    Label(viewModel.scheduledButtonTitle, systemImage: "calendar")
+                }
+                .font(.subheadline)
+                .buttonStyle(.borderless)
+            }
+            .controlSize(.small)
 
             TextEditor(text: $viewModel.composerText)
                 .focused($isComposerFocused)
@@ -118,9 +194,56 @@ struct FeedView: View {
             HStack {
                 Text("\(viewModel.composerText.count)/1000")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(viewModel.composerText.count > 1000 ? .red : .secondary)
+
+                if let draftStatusText = viewModel.draftStatusText {
+                    Text(draftStatusText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 Spacer()
+
+                if !viewModel.composerText.isEmpty {
+                    Button {
+                        viewModel.clearComposer()
+                        isComposerFocused = false
+                    } label: {
+                        Image(systemName: "xmark.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Clear")
+                    .disabled(viewModel.isPosting)
+                }
+            }
+
+            HStack {
+                Spacer()
+
+                Button {
+                    viewModel.saveCurrentDraft()
+                } label: {
+                    Label("Save Draft", systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.bordered)
+                .disabled(
+                    viewModel.isPosting ||
+                    viewModel.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+
+                Button {
+                    scheduledAt = Date().addingTimeInterval(3600)
+                    isShowingSchedulePost = true
+                    isComposerFocused = false
+                } label: {
+                    Label("Schedule", systemImage: "clock")
+                }
+                .buttonStyle(.bordered)
+                .disabled(
+                    viewModel.isPosting ||
+                    viewModel.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                    viewModel.composerText.count > 1000
+                )
 
                 Button {
                     Task {
@@ -137,9 +260,11 @@ struct FeedView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(
                     viewModel.isPosting ||
-                    viewModel.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    viewModel.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                    viewModel.composerText.count > 1000
                 )
             }
+            .controlSize(.small)
         }
         .padding()
     }
@@ -230,6 +355,205 @@ struct FeedView: View {
                             isComposerCollapsed = true
                         }
                 )
+            }
+        }
+    }
+}
+
+private struct SchedulePostView: View {
+    let bodyText: String
+    let onSchedule: (Date) -> Bool
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var scheduledAt: Date
+
+    init(
+        bodyText: String,
+        defaultScheduledAt: Date,
+        onSchedule: @escaping (Date) -> Bool
+    ) {
+        self.bodyText = bodyText
+        self.onSchedule = onSchedule
+        _scheduledAt = State(initialValue: defaultScheduledAt)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(bodyText)
+                        .lineLimit(5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+
+                    DatePicker(
+                        "Post at",
+                        selection: $scheduledAt,
+                        in: Date()...,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    .datePickerStyle(.graphical)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+            }
+            .navigationTitle("Schedule post")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Schedule") {
+                        if onSchedule(scheduledAt) {
+                            dismiss()
+                        }
+                    }
+                    .disabled(scheduledAt <= Date())
+                }
+            }
+        }
+    }
+}
+
+private struct ScheduledPostsView: View {
+    let scheduledPosts: [ScheduledPost]
+    let onSelect: (ScheduledPost) -> Void
+    let onDelete: (ScheduledPost) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if scheduledPosts.isEmpty {
+                    ContentUnavailableView(
+                        "No scheduled posts",
+                        systemImage: "calendar",
+                        description: Text("Scheduled posts will appear here.")
+                    )
+                } else {
+                    List {
+                        ForEach(scheduledPosts) { scheduledPost in
+                            Button {
+                                onSelect(scheduledPost)
+                                dismiss()
+                            } label: {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(scheduledPost.previewText)
+                                        .lineLimit(3)
+                                        .multilineTextAlignment(.leading)
+                                        .foregroundStyle(.primary)
+
+                                    HStack(spacing: 8) {
+                                        Text("Posts \(scheduledPost.formattedScheduledAt)")
+                                            .foregroundStyle(.secondary)
+
+                                        if scheduledPost.lastError != nil {
+                                            Text("Failed")
+                                                .foregroundStyle(.red)
+                                        }
+                                    }
+                                    .font(.caption)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    onDelete(scheduledPost)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .navigationTitle("Scheduled")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct DraftsView: View {
+    let drafts: [DraftPost]
+    let activeDraftID: DraftPost.ID?
+    let onSelect: (DraftPost) -> Void
+    let onDelete: (DraftPost) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if drafts.isEmpty {
+                    ContentUnavailableView(
+                        "No drafts",
+                        systemImage: "doc.text",
+                        description: Text("Saved drafts will appear here.")
+                    )
+                } else {
+                    List {
+                        ForEach(drafts) { draft in
+                            Button {
+                                onSelect(draft)
+                                dismiss()
+                            } label: {
+                                HStack(alignment: .top, spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(draft.previewText)
+                                            .lineLimit(3)
+                                            .multilineTextAlignment(.leading)
+                                            .foregroundStyle(.primary)
+
+                                        Text("Saved \(draft.formattedUpdatedAt)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Spacer()
+
+                                    if draft.id == activeDraftID {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundStyle(.blue)
+                                    }
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    onDelete(draft)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .navigationTitle("Drafts")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
             }
         }
     }
