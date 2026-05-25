@@ -12,13 +12,21 @@ struct PendingCreatePost: Codable, Identifiable, Equatable {
     let body: String
     let createdAt: String
     var lastError: String?
+    let replyToId: Int?
 
     var id: Int {
         localId
     }
 
     var post: MicroPost {
-        MicroPost(id: localId, body: body, createdAt: createdAt)
+        MicroPost(
+            id: localId,
+            body: body,
+            createdAt: createdAt,
+            parentId: replyToId,
+            syndicatedPlatforms: nil,
+            platformPostIds: nil
+        )
     }
 }
 
@@ -234,18 +242,26 @@ final class OfflinePostStore {
     func updateCachedPost(id: Int, body: String) {
         let updatedPosts = cachedPosts().map { post in
             guard post.id == id else { return post }
-            return MicroPost(id: post.id, body: body, createdAt: post.createdAt)
+            return MicroPost(
+                id: post.id,
+                body: body,
+                createdAt: post.createdAt,
+                parentId: post.parentId,
+                syndicatedPlatforms: post.syndicatedPlatforms,
+                platformPostIds: post.platformPostIds
+            )
         }
 
         encode(updatedPosts, forKey: Keys.cachedPosts)
     }
 
-    func enqueueCreate(body: String) -> MicroPost {
+    func enqueueCreate(body: String, replyToId: Int? = nil) -> MicroPost {
         let pendingPost = PendingCreatePost(
             localId: nextLocalId(existingPosts: pendingCreates()),
             body: body,
             createdAt: Self.serverDateFormatter.string(from: Date()),
-            lastError: nil
+            lastError: nil,
+            replyToId: replyToId
         )
 
         var pending = pendingCreates()

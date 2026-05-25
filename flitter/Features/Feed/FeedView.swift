@@ -10,10 +10,12 @@ import UIKit
 
 struct FeedView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
 
     @StateObject private var viewModel = FeedViewModel()
     @State private var isComposerCollapsed = false
     @State private var editingPost: MicroPost?
+    @State private var replyingTo: MicroPost?
     @State private var isShowingDrafts = false
     @State private var isShowingScheduled = false
     @State private var isShowingSchedulePost = false
@@ -71,6 +73,11 @@ struct FeedView: View {
             .sheet(item: $editingPost) { post in
                 EditPostView(post: post) { body in
                     await viewModel.updatePost(post, body: body)
+                }
+            }
+            .sheet(item: $replyingTo) { post in
+                ReplyView(parentPost: post) { body in
+                    await viewModel.submitReply(to: post, body: body)
                 }
             }
             .sheet(isPresented: $isShowingDrafts) {
@@ -299,22 +306,43 @@ struct FeedView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .textSelection(.enabled)
 
-                            HStack(spacing: 8) {
+                            HStack(spacing: 6) {
+                                if post.parentId != nil {
+                                    Image(systemName: "arrowshape.turn.up.left")
+                                }
+
                                 Text(post.formattedDate)
-                                    .foregroundStyle(.secondary)
 
                                 if let pendingStatus = viewModel.pendingStatusText(for: post) {
                                     Text(pendingStatus)
                                         .foregroundStyle(viewModel.hasFailedToSync(post) ? .red : .secondary)
                                 }
+
+                                Spacer()
+
+                                if let label = post.primaryPlatformLabel {
+                                    Text(label)
+                                }
                             }
                             .font(.caption)
+                            .foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if let url = post.platformURL {
+                                openURL(url)
+                            }
+                        }
                         .contextMenu {
                             if !viewModel.isPendingPost(post) {
                                 Button("Edit") {
                                     editingPost = post
+                                }
+                                Button {
+                                    replyingTo = post
+                                } label: {
+                                    Label("Reply", systemImage: "arrowshape.turn.up.left")
                                 }
                             }
 
@@ -566,6 +594,83 @@ private struct DraftsView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+private struct ReplyView: View {
+    let parentPost: MicroPost
+    let onReply: (String) async -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var replyText = ""
+    @State private var isPosting = false
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Replying to")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Text(parentPost.body)
+                        .lineLimit(5)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(12)
+                .background(Color.secondary.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                TextEditor(text: $replyText)
+                    .focused($isFocused)
+                    .frame(minHeight: 120)
+                    .padding(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+                    )
+
+                Text("\(replyText.count)/1000")
+                    .font(.caption)
+                    .foregroundStyle(replyText.count > 1000 ? .red : .secondary)
+
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("Reply")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(isPosting)
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        Task {
+                            isPosting = true
+                            await onReply(replyText)
+                            isPosting = false
+                            dismiss()
+                        }
+                    } label: {
+                        if isPosting {
+                            ProgressView()
+                        } else {
+                            Text("Reply")
+                        }
+                    }
+                    .disabled(
+                        isPosting ||
+                        replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        replyText.count > 1000
+                    )
+                }
+            }
+            .task { isFocused = true }
         }
     }
 }
