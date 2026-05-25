@@ -57,6 +57,21 @@ final class MicroblogAPI {
         return try JSONDecoder().decode(CreatePostResponse.self, from: data).id
     }
 
+    func createReply(body: String, replyToId: Int) async throws -> Int {
+        var request = URLRequest(url: AppConfig.baseURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(AppConfig.adminToken, forHTTPHeaderField: "X-Admin-Token")
+
+        let payload: [String: Any] = ["body": body, "reply_to_id": replyToId]
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response: response, data: data)
+
+        return try JSONDecoder().decode(CreatePostResponse.self, from: data).id
+    }
+
     func updatePost(id: Int, body: String) async throws -> Bool {
         var components = URLComponents(url: AppConfig.baseURL, resolvingAgainstBaseURL: false)
         components?.queryItems = [

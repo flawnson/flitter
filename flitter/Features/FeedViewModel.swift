@@ -305,11 +305,42 @@ final class FeedViewModel: ObservableObject {
         }
     }
 
+    func submitReply(to parentPost: MicroPost, body: String) async {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard trimmed.count <= 1000 else {
+            errorMessage = "Reply is too long."
+            return
+        }
+
+        isPosting = true
+        errorMessage = nil
+
+        defer { isPosting = false }
+
+        do {
+            _ = try await api.createReply(body: trimmed, replyToId: parentPost.id)
+            await syncAndRefreshPosts(showError: true)
+        } catch {
+            guard error.isOfflineError else {
+                errorMessage = error.localizedDescription
+                return
+            }
+
+            _ = offlineStore.enqueueCreate(body: trimmed, replyToId: parentPost.id)
+            posts = offlineStore.displayPosts()
+        }
+    }
+
     private func syncPendingCreates() async throws {
         for pendingPost in offlineStore.pendingCreates() {
             do {
                 offlineStore.clearPendingCreateFailure(localId: pendingPost.localId)
-                _ = try await api.createPost(body: pendingPost.body)
+                if let replyToId = pendingPost.replyToId {
+                    _ = try await api.createReply(body: pendingPost.body, replyToId: replyToId)
+                } else {
+                    _ = try await api.createPost(body: pendingPost.body)
+                }
                 offlineStore.removePendingCreate(localId: pendingPost.localId)
             } catch {
                 if !error.isOfflineError {
@@ -347,7 +378,14 @@ final class FeedViewModel: ObservableObject {
 
     private func replacePost(_ post: MicroPost, body: String) {
         guard let index = posts.firstIndex(where: { $0.id == post.id }) else { return }
-        posts[index] = MicroPost(id: post.id, body: body, createdAt: post.createdAt)
+        posts[index] = MicroPost(
+            id: post.id,
+            body: body,
+            createdAt: post.createdAt,
+            parentId: post.parentId,
+            syndicatedPlatforms: post.syndicatedPlatforms,
+            platformPostIds: post.platformPostIds
+        )
     }
 
     private func autosaveActiveDraft() {
