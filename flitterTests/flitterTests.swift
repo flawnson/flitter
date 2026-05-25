@@ -62,6 +62,41 @@ final class flitterTests: XCTestCase {
         XCTAssertNil(store.activeDraftId())
     }
 
+    @MainActor
+    func testSavingCurrentDraftTwiceKeepsSeparateDrafts() throws {
+        let store = OfflinePostStore(defaults: defaults)
+        let viewModel = FeedViewModel(offlineStore: store, startsNetworkMonitor: false)
+
+        viewModel.composerText = "First draft"
+        viewModel.saveCurrentDraft()
+        viewModel.composerText = "Second draft"
+        viewModel.saveCurrentDraft()
+
+        let savedBodies = Set(store.savedDrafts().map(\.body))
+        XCTAssertEqual(store.savedDrafts().count, 2)
+        XCTAssertEqual(savedBodies, ["First draft", "Second draft"])
+        XCTAssertNil(viewModel.activeDraftID)
+    }
+
+    @MainActor
+    func testSavingLoadedDraftUpdatesThenDetachesComposer() throws {
+        let store = OfflinePostStore(defaults: defaults)
+        let draft = store.saveDraft(body: "Original draft")
+        let viewModel = FeedViewModel(offlineStore: store, startsNetworkMonitor: false)
+
+        viewModel.loadDraft(draft)
+        viewModel.composerText = "Updated draft"
+        viewModel.saveCurrentDraft()
+        viewModel.composerText = "New draft"
+        viewModel.saveCurrentDraft()
+
+        let savedDrafts = store.savedDrafts()
+        XCTAssertEqual(savedDrafts.count, 2)
+        XCTAssertEqual(store.savedDraft(id: draft.id)?.body, "Updated draft")
+        XCTAssertTrue(savedDrafts.contains { $0.body == "New draft" })
+        XCTAssertNil(viewModel.activeDraftID)
+    }
+
     func testSchedulingPostCreatesLocalScheduledPost() throws {
         let store = OfflinePostStore(defaults: defaults)
         let scheduledAt = Date().addingTimeInterval(3600)

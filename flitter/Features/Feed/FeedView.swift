@@ -508,32 +508,43 @@ private struct DraftsView: View {
                 } else {
                     List {
                         ForEach(drafts) { draft in
-                            Button {
-                                onSelect(draft)
-                                dismiss()
-                            } label: {
-                                HStack(alignment: .top, spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(draft.previewText)
-                                            .lineLimit(3)
-                                            .multilineTextAlignment(.leading)
-                                            .foregroundStyle(.primary)
+                            HStack(alignment: .top, spacing: 12) {
+                                Button {
+                                    onSelect(draft)
+                                    dismiss()
+                                } label: {
+                                    HStack(alignment: .top, spacing: 12) {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text(draft.previewText)
+                                                .lineLimit(3)
+                                                .multilineTextAlignment(.leading)
+                                                .foregroundStyle(.primary)
 
-                                        Text("Saved \(draft.formattedUpdatedAt)")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                            Text("Saved \(draft.formattedUpdatedAt)")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+
+                                        Spacer()
+
+                                        if draft.id == activeDraftID {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundStyle(.blue)
+                                        }
                                     }
-
-                                    Spacer()
-
-                                    if draft.id == activeDraftID {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(.blue)
-                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
                                 }
-                                .contentShape(Rectangle())
+                                .buttonStyle(.plain)
+
+                                Button(role: .destructive) {
+                                    onDelete(draft)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("Delete draft")
                             }
-                            .buttonStyle(.plain)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(role: .destructive) {
                                     onDelete(draft)

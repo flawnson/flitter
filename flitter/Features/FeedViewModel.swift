@@ -32,7 +32,7 @@ final class FeedViewModel: ObservableObject {
     @Published var lastUpdatedText: String?
 
     private let api = MicroblogAPI()
-    private let offlineStore = OfflinePostStore()
+    private let offlineStore: OfflinePostStore
     private let networkMonitor = NWPathMonitor()
     private let networkMonitorQueue = DispatchQueue(label: "FeedViewModel.NetworkMonitor")
     private var isSyncing = false
@@ -58,7 +58,13 @@ final class FeedViewModel: ObservableObject {
         return "Scheduled (\(scheduledPosts.count))"
     }
 
-    init() {
+    convenience init() {
+        self.init(offlineStore: OfflinePostStore())
+    }
+
+    init(offlineStore: OfflinePostStore, startsNetworkMonitor: Bool = true) {
+        self.offlineStore = offlineStore
+
         drafts = offlineStore.savedDrafts()
         scheduledPosts = offlineStore.scheduledPosts()
         scheduleNextScheduledPostTimer()
@@ -75,14 +81,16 @@ final class FeedViewModel: ObservableObject {
         composerText = offlineStore.composerDraft()
         updateLastUpdatedText()
 
-        networkMonitor.pathUpdateHandler = { [weak self] path in
-            guard path.status == .satisfied else { return }
+        if startsNetworkMonitor {
+            networkMonitor.pathUpdateHandler = { [weak self] path in
+                guard path.status == .satisfied else { return }
 
-            Task { @MainActor in
-                await self?.syncAndRefreshPosts(showError: false)
+                Task { @MainActor in
+                    await self?.syncAndRefreshPosts(showError: false)
+                }
             }
+            networkMonitor.start(queue: networkMonitorQueue)
         }
-        networkMonitor.start(queue: networkMonitorQueue)
     }
 
     deinit {
@@ -138,8 +146,13 @@ final class FeedViewModel: ObservableObject {
         guard !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
         errorMessage = nil
-        let draft = offlineStore.saveDraft(body: composerText, id: activeDraftID)
-        activeDraftID = draft.id
+        if let activeDraftID, offlineStore.savedDraft(id: activeDraftID) != nil {
+            _ = offlineStore.saveDraft(body: composerText, id: activeDraftID)
+        } else {
+            _ = offlineStore.saveDraft(body: composerText)
+        }
+
+        activeDraftID = nil
         refreshDrafts()
     }
 
