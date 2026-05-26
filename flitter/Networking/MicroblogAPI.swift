@@ -94,7 +94,9 @@ final class MicroblogAPI {
             request.httpBody = try JSONSerialization.data(withJSONObject: ["body": body])
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let session = request.value(forHTTPHeaderField: "Content-Type")?.contains("multipart") == true
+            ? Self.imageUploadSession : URLSession.shared
+        let (data, response) = try await session.data(for: request)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(CreatePostResponse.self, from: data).id
     }
@@ -117,10 +119,19 @@ final class MicroblogAPI {
             request.httpBody = try JSONSerialization.data(withJSONObject: ["body": body, "reply_to_id": replyToId])
         }
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let session = request.value(forHTTPHeaderField: "Content-Type")?.contains("multipart") == true
+            ? Self.imageUploadSession : URLSession.shared
+        let (data, response) = try await session.data(for: request)
         try validate(response: response, data: data)
         return try JSONDecoder().decode(CreatePostResponse.self, from: data).id
     }
+
+    private static let imageUploadSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 120
+        config.timeoutIntervalForResource = 180
+        return URLSession(configuration: config)
+    }()
 
     func updatePost(id: Int, body: String) async throws -> Bool {
         var components = URLComponents(url: AppConfig.baseURL, resolvingAgainstBaseURL: false)
