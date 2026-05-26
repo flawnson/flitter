@@ -43,6 +43,7 @@ struct MicroPost: Codable, Identifiable, Equatable {
     let parentId: Int?
     let syndicatedPlatforms: [String]?
     let platformPostIds: PlatformPostIds?
+    let hasImage: Bool
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -51,6 +52,17 @@ struct MicroPost: Codable, Identifiable, Equatable {
         case parentId = "parent_id"
         case syndicatedPlatforms = "syndicated_platforms"
         case platformPostIds = "platform_post_ids"
+        case hasImage = "has_image"
+    }
+
+    init(id: Int, body: String, createdAt: String, parentId: Int?, syndicatedPlatforms: [String]?, platformPostIds: PlatformPostIds?, hasImage: Bool = false) {
+        self.id = id
+        self.body = body
+        self.createdAt = createdAt
+        self.parentId = parentId
+        self.syndicatedPlatforms = syndicatedPlatforms
+        self.platformPostIds = platformPostIds
+        self.hasImage = hasImage
     }
 
     var createdDate: Date? {

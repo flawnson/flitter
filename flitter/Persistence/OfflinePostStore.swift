@@ -25,7 +25,8 @@ struct PendingCreatePost: Codable, Identifiable, Equatable {
             createdAt: createdAt,
             parentId: replyToId,
             syndicatedPlatforms: nil,
-            platformPostIds: nil
+            platformPostIds: nil,
+            hasImage: false
         )
     }
 }
@@ -248,7 +249,8 @@ final class OfflinePostStore {
                 createdAt: post.createdAt,
                 parentId: post.parentId,
                 syndicatedPlatforms: post.syndicatedPlatforms,
-                platformPostIds: post.platformPostIds
+                platformPostIds: post.platformPostIds,
+                hasImage: post.hasImage
             )
         }
 

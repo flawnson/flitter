@@ -7,6 +7,7 @@
 
 import SwiftUI
 import UIKit
+import PhotosUI
 
 struct FeedView: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -16,6 +17,8 @@ struct FeedView: View {
     @State private var isComposerCollapsed = false
     @State private var editingPost: MicroPost?
     @State private var replyingTo: MicroPost?
+    @State private var composerImage: UIImage?
+    @State private var composerImageItem: PhotosPickerItem?
     @State private var isShowingDrafts = false
     @State private var isShowingScheduled = false
     @State private var isShowingSchedulePost = false
@@ -76,8 +79,8 @@ struct FeedView: View {
                 }
             }
             .sheet(item: $replyingTo) { post in
-                ReplyView(parentPost: post) { body in
-                    await viewModel.submitReply(to: post, body: body)
+                ReplyView(parentPost: post) { body, image in
+                    await viewModel.submitReply(to: post, body: body, image: image)
                 }
             }
             .sheet(isPresented: $isShowingDrafts) {
@@ -224,7 +227,42 @@ struct FeedView: View {
                 }
             }
 
+            if let composerImage {
+                HStack {
+                    Image(uiImage: composerImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 60, height: 60)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                    Button {
+                        self.composerImage = nil
+                        composerImageItem = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+            }
+
             HStack {
+                PhotosPicker(selection: $composerImageItem, matching: .images) {
+                    Image(systemName: "photo")
+                }
+                .buttonStyle(.borderless)
+                .onChange(of: composerImageItem) { item in
+                    Task {
+                        guard let item else { return }
+                        if let data = try? await item.loadTransferable(type: Data.self),
+                           let image = UIImage(data: data) {
+                            composerImage = image
+                        }
+                    }
+                }
+
                 Spacer()
 
                 Button {
@@ -254,7 +292,10 @@ struct FeedView: View {
 
                 Button {
                     Task {
-                        await viewModel.submitPost()
+                        let image = composerImage
+                        composerImage = nil
+                        composerImageItem = nil
+                        await viewModel.submitPost(image: image)
                         isComposerFocused = false
                     }
                 } label: {
@@ -319,6 +360,10 @@ struct FeedView: View {
                                 }
 
                                 Spacer()
+
+                                if post.hasImage {
+                                    Text("Photo")
+                                }
 
                                 if let label = post.primaryPlatformLabel {
                                     Text(label)
@@ -600,10 +645,12 @@ private struct DraftsView: View {
 
 private struct ReplyView: View {
     let parentPost: MicroPost
-    let onReply: (String) async -> Void
+    let onReply: (String, UIImage?) async -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var replyText = ""
+    @State private var replyImage: UIImage?
+    @State private var replyImageItem: PhotosPickerItem?
     @State private var isPosting = false
     @FocusState private var isFocused: Bool
 
@@ -633,9 +680,46 @@ private struct ReplyView: View {
                             .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
                     )
 
-                Text("\(replyText.count)/1000")
-                    .font(.caption)
-                    .foregroundStyle(replyText.count > 1000 ? .red : .secondary)
+                if let replyImage {
+                    HStack {
+                        Image(uiImage: replyImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 60, height: 60)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                        Button {
+                            self.replyImage = nil
+                            replyImageItem = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+
+                        Spacer()
+                    }
+                }
+
+                HStack {
+                    PhotosPicker(selection: $replyImageItem, matching: .images) {
+                        Image(systemName: "photo")
+                    }
+                    .buttonStyle(.borderless)
+                    .onChange(of: replyImageItem) { item in
+                        Task {
+                            guard let item else { return }
+                            if let data = try? await item.loadTransferable(type: Data.self),
+                               let image = UIImage(data: data) {
+                                replyImage = image
+                            }
+                        }
+                    }
+
+                    Text("\(replyText.count)/1000")
+                        .font(.caption)
+                        .foregroundStyle(replyText.count > 1000 ? .red : .secondary)
+                }
 
                 Spacer()
             }
@@ -652,7 +736,8 @@ private struct ReplyView: View {
                     Button {
                         Task {
                             isPosting = true
-                            await onReply(replyText)
+                            let image = replyImage
+                            await onReply(replyText, image)
                             isPosting = false
                             dismiss()
                         }

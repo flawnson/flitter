@@ -9,6 +9,7 @@
 import Foundation
 import Combine
 import Network
+import UIKit
 
 @MainActor
 final class FeedViewModel: ObservableObject {
@@ -111,7 +112,7 @@ final class FeedViewModel: ObservableObject {
         await syncAndRefreshPosts(showError: posts.isEmpty)
     }
     
-    func submitPost() async {
+    func submitPost(image: UIImage? = nil) async {
         let trimmed = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         guard trimmed.count <= 1000 else {
@@ -127,7 +128,7 @@ final class FeedViewModel: ObservableObject {
         }
 
         do {
-            _ = try await api.createPost(body: trimmed)
+            _ = try await api.createPost(body: trimmed, image: image)
             clearComposerAfterPost()
             await syncAndRefreshPosts(showError: true)
         } catch {
@@ -318,7 +319,7 @@ final class FeedViewModel: ObservableObject {
         }
     }
 
-    func submitReply(to parentPost: MicroPost, body: String) async {
+    func submitReply(to parentPost: MicroPost, body: String, image: UIImage? = nil) async {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         guard trimmed.count <= 1000 else {
@@ -332,7 +333,7 @@ final class FeedViewModel: ObservableObject {
         defer { isPosting = false }
 
         do {
-            _ = try await api.createReply(body: trimmed, replyToId: parentPost.id)
+            _ = try await api.createReply(body: trimmed, replyToId: parentPost.id, image: image)
             await syncAndRefreshPosts(showError: true)
         } catch {
             guard error.isOfflineError else {
@@ -397,7 +398,8 @@ final class FeedViewModel: ObservableObject {
             createdAt: post.createdAt,
             parentId: post.parentId,
             syndicatedPlatforms: post.syndicatedPlatforms,
-            platformPostIds: post.platformPostIds
+            platformPostIds: post.platformPostIds,
+            hasImage: post.hasImage
         )
     }
 
