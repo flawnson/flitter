@@ -121,7 +121,12 @@ struct FeedView: View {
                     bodyText: viewModel.composerText,
                     defaultScheduledAt: scheduledAt,
                     onSchedule: { date in
-                        viewModel.scheduleCurrentPost(at: date)
+                        let scheduled = viewModel.scheduleCurrentPost(at: date, image: composerImage)
+                        if scheduled {
+                            composerImage = nil
+                            composerImageItem = nil
+                        }
+                        return scheduled
                     }
                 )
             }

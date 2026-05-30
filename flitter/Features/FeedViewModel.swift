@@ -137,7 +137,7 @@ final class FeedViewModel: ObservableObject {
                 return
             }
 
-            _ = offlineStore.enqueueCreate(body: trimmed)
+            _ = offlineStore.enqueueCreate(body: trimmed, imageData: Self.queuedImageData(from: image))
             clearComposerAfterPost()
             posts = offlineStore.displayPosts()
         }
@@ -188,7 +188,7 @@ final class FeedViewModel: ObservableObject {
         composerText = ""
     }
 
-    func scheduleCurrentPost(at scheduledAt: Date) -> Bool {
+    func scheduleCurrentPost(at scheduledAt: Date, image: UIImage? = nil) -> Bool {
         let trimmed = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         guard trimmed.count <= 1000 else {
@@ -201,7 +201,7 @@ final class FeedViewModel: ObservableObject {
         }
 
         errorMessage = nil
-        _ = offlineStore.schedulePost(body: trimmed, scheduledAt: scheduledAt)
+        _ = offlineStore.schedulePost(body: trimmed, scheduledAt: scheduledAt, imageData: Self.queuedImageData(from: image))
         clearComposerAfterScheduling()
         refreshScheduledPosts()
         return true
@@ -341,7 +341,7 @@ final class FeedViewModel: ObservableObject {
                 return
             }
 
-            _ = offlineStore.enqueueCreate(body: trimmed, replyToId: parentPost.id)
+            _ = offlineStore.enqueueCreate(body: trimmed, replyToId: parentPost.id, imageData: Self.queuedImageData(from: image))
             posts = offlineStore.displayPosts()
         }
     }
@@ -350,10 +350,11 @@ final class FeedViewModel: ObservableObject {
         for pendingPost in offlineStore.pendingCreates() {
             do {
                 offlineStore.clearPendingCreateFailure(localId: pendingPost.localId)
+                let image = pendingPost.imageData.flatMap(UIImage.init(data:))
                 if let replyToId = pendingPost.replyToId {
-                    _ = try await api.createReply(body: pendingPost.body, replyToId: replyToId)
+                    _ = try await api.createReply(body: pendingPost.body, replyToId: replyToId, image: image)
                 } else {
-                    _ = try await api.createPost(body: pendingPost.body)
+                    _ = try await api.createPost(body: pendingPost.body, image: image)
                 }
                 offlineStore.removePendingCreate(localId: pendingPost.localId)
             } catch {
@@ -373,7 +374,8 @@ final class FeedViewModel: ObservableObject {
         for scheduledPost in offlineStore.dueScheduledPosts() {
             do {
                 offlineStore.clearScheduledPostFailure(id: scheduledPost.id)
-                _ = try await api.createPost(body: scheduledPost.body)
+                let image = scheduledPost.imageData.flatMap(UIImage.init(data:))
+                _ = try await api.createPost(body: scheduledPost.body, image: image)
                 offlineStore.removeScheduledPost(id: scheduledPost.id)
             } catch {
                 if error.isOfflineError {
@@ -433,6 +435,13 @@ final class FeedViewModel: ObservableObject {
         }
 
         composerText = ""
+    }
+
+    // Compress an attached image to JPEG bytes for persisting in the offline/scheduled queue.
+    // The server re-compresses on upload, so a single moderate pass here just keeps the
+    // stored blob small. Returns nil when there is no image.
+    private static func queuedImageData(from image: UIImage?) -> Data? {
+        image?.jpegData(compressionQuality: 0.8)
     }
 
     private func refreshDrafts() {

@@ -13,6 +13,9 @@ struct PendingCreatePost: Codable, Identifiable, Equatable {
     let createdAt: String
     var lastError: String?
     let replyToId: Int?
+    // JPEG bytes of an attached image, persisted so offline/retry resends keep the image.
+    // Optional so posts queued by older app versions (no key) still decode.
+    let imageData: Data?
 
     var id: Int {
         localId
@@ -26,7 +29,7 @@ struct PendingCreatePost: Codable, Identifiable, Equatable {
             parentId: replyToId,
             syndicatedPlatforms: nil,
             platformPostIds: nil,
-            hasImage: false
+            hasImage: imageData != nil
         )
     }
 }
@@ -60,6 +63,8 @@ struct ScheduledPost: Codable, Identifiable, Equatable {
     var scheduledAt: Date
     let createdAt: Date
     var lastError: String?
+    // JPEG bytes of an attached image, persisted so the scheduled post fires with its image.
+    var imageData: Data?
 
     var previewText: String {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -198,14 +203,15 @@ final class OfflinePostStore {
         scheduledPosts().filter { $0.scheduledAt <= now }
     }
 
-    func schedulePost(body: String, scheduledAt: Date) -> ScheduledPost {
+    func schedulePost(body: String, scheduledAt: Date, imageData: Data? = nil) -> ScheduledPost {
         let now = Date()
         let scheduledPost = ScheduledPost(
             id: UUID(),
             body: body,
             scheduledAt: scheduledAt,
             createdAt: now,
-            lastError: nil
+            lastError: nil,
+            imageData: imageData
         )
 
         var posts = scheduledPosts()
@@ -257,13 +263,14 @@ final class OfflinePostStore {
         encode(updatedPosts, forKey: Keys.cachedPosts)
     }
 
-    func enqueueCreate(body: String, replyToId: Int? = nil) -> MicroPost {
+    func enqueueCreate(body: String, replyToId: Int? = nil, imageData: Data? = nil) -> MicroPost {
         let pendingPost = PendingCreatePost(
             localId: nextLocalId(existingPosts: pendingCreates()),
             body: body,
             createdAt: Self.serverDateFormatter.string(from: Date()),
             lastError: nil,
-            replyToId: replyToId
+            replyToId: replyToId,
+            imageData: imageData
         )
 
         var pending = pendingCreates()
