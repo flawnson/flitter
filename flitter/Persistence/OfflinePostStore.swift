@@ -13,9 +13,17 @@ struct PendingCreatePost: Codable, Identifiable, Equatable {
     let createdAt: String
     var lastError: String?
     let replyToId: Int?
+    // Optional so posts queued before this field existed still decode (they
+    // simply fall back to `.auto`). Ignored for replies, which inherit the
+    // parent's routing server-side.
+    let syndication: String?
 
     var id: Int {
         localId
+    }
+
+    var syndicationChoice: SyndicationChoice {
+        SyndicationChoice.from(syndication)
     }
 
     var post: MicroPost {
@@ -60,6 +68,12 @@ struct ScheduledPost: Codable, Identifiable, Equatable {
     var scheduledAt: Date
     let createdAt: Date
     var lastError: String?
+    // Optional for back-compat with posts scheduled before this field existed.
+    var syndication: String?
+
+    var syndicationChoice: SyndicationChoice {
+        SyndicationChoice.from(syndication)
+    }
 
     var previewText: String {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -198,14 +212,15 @@ final class OfflinePostStore {
         scheduledPosts().filter { $0.scheduledAt <= now }
     }
 
-    func schedulePost(body: String, scheduledAt: Date) -> ScheduledPost {
+    func schedulePost(body: String, scheduledAt: Date, syndication: SyndicationChoice = .auto) -> ScheduledPost {
         let now = Date()
         let scheduledPost = ScheduledPost(
             id: UUID(),
             body: body,
             scheduledAt: scheduledAt,
             createdAt: now,
-            lastError: nil
+            lastError: nil,
+            syndication: syndication.wireValue
         )
 
         var posts = scheduledPosts()
@@ -257,13 +272,14 @@ final class OfflinePostStore {
         encode(updatedPosts, forKey: Keys.cachedPosts)
     }
 
-    func enqueueCreate(body: String, replyToId: Int? = nil) -> MicroPost {
+    func enqueueCreate(body: String, replyToId: Int? = nil, syndication: SyndicationChoice = .auto) -> MicroPost {
         let pendingPost = PendingCreatePost(
             localId: nextLocalId(existingPosts: pendingCreates()),
             body: body,
             createdAt: Self.serverDateFormatter.string(from: Date()),
             lastError: nil,
-            replyToId: replyToId
+            replyToId: replyToId,
+            syndication: syndication.wireValue
         )
 
         var pending = pendingCreates()

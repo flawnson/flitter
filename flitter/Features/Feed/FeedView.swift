@@ -212,6 +212,15 @@ struct FeedView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if viewModel.syndicationChoice != .auto {
+                    Label(
+                        viewModel.syndicationChoice.composerStatusText,
+                        systemImage: viewModel.syndicationChoice == .none ? "nosign" : "arrow.up.forward"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(viewModel.syndicationChoice == .none ? .orange : .secondary)
+                }
+
                 Spacer()
 
                 if !viewModel.composerText.isEmpty {
@@ -259,6 +268,11 @@ struct FeedView: View {
                         if let data = try? await item.loadTransferable(type: Data.self),
                            let image = UIImage(data: data) {
                             composerImage = image
+                            // Threads can't carry a photo; drop the forced choice
+                            // back to Auto so we never try to route an image there.
+                            if viewModel.syndicationChoice == .threads {
+                                viewModel.syndicationChoice = .auto
+                            }
                         }
                     }
                 }
@@ -290,31 +304,71 @@ struct FeedView: View {
                     viewModel.composerText.count > 1000
                 )
 
-                Button {
-                    Task {
-                        let image = composerImage
-                        composerImage = nil
-                        composerImageItem = nil
-                        await viewModel.submitPost(image: image)
-                        isComposerFocused = false
+                HStack(spacing: 2) {
+                    Button {
+                        Task {
+                            let image = composerImage
+                            composerImage = nil
+                            composerImageItem = nil
+                            await viewModel.submitPost(image: image)
+                            isComposerFocused = false
+                        }
+                    } label: {
+                        if viewModel.isPosting {
+                            ProgressView()
+                        } else {
+                            Text("Post")
+                        }
                     }
-                } label: {
-                    if viewModel.isPosting {
-                        ProgressView()
-                    } else {
-                        Text("Post")
+                    .disabled(
+                        viewModel.isPosting ||
+                        viewModel.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        viewModel.composerText.count > 1000
+                    )
+
+                    Menu {
+                        Section {
+                            syndicationOption(.auto)
+                            syndicationOption(.none)
+                        }
+                        Section("Force a platform") {
+                            syndicationOption(.x)
+                            syndicationOption(.threads)
+                            syndicationOption(.bluesky)
+                        }
+                    } label: {
+                        Image(systemName: viewModel.syndicationChoice.triggerSystemImage)
+                            .font(.caption.weight(.semibold))
                     }
+                    .disabled(viewModel.isPosting)
+                    .accessibilityLabel("Syndication options")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(
-                    viewModel.isPosting ||
-                    viewModel.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                    viewModel.composerText.count > 1000
-                )
             }
             .controlSize(.small)
         }
         .padding()
+    }
+
+    /// One row in the routing menu. Shows a checkmark on the current choice so
+    /// the flat list behaves like a single-select (radio) group. Threads is
+    /// disabled while a photo is attached, since Threads syndication is
+    /// text-only.
+    @ViewBuilder
+    private func syndicationOption(_ choice: SyndicationChoice) -> some View {
+        let isDisabled = choice == .threads && composerImage != nil
+        Button {
+            viewModel.syndicationChoice = choice
+        } label: {
+            if viewModel.syndicationChoice == choice {
+                Label(choice.menuLabel, systemImage: "checkmark")
+            } else if isDisabled {
+                Text("\(choice.menuLabel) (no photos)")
+            } else {
+                Text(choice.menuLabel)
+            }
+        }
+        .disabled(isDisabled)
     }
 
     private var content: some View {

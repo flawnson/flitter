@@ -27,6 +27,10 @@ final class FeedViewModel: ObservableObject {
         }
     }
     @Published var scheduledPosts: [ScheduledPost] = []
+    /// Routing for the next post the composer sends. Resets to `.auto` each
+    /// launch so a "don't syndicate" choice can never silently persist forever;
+    /// the composer surfaces the current value whenever it isn't `.auto`.
+    @Published var syndicationChoice: SyndicationChoice = .auto
     @Published var isLoading = false
     @Published var isPosting = false
     @Published var errorMessage: String?
@@ -127,8 +131,10 @@ final class FeedViewModel: ObservableObject {
             isPosting = false
         }
 
+        let syndication = syndicationChoice
+
         do {
-            _ = try await api.createPost(body: trimmed, image: image)
+            _ = try await api.createPost(body: trimmed, image: image, syndication: syndication)
             clearComposerAfterPost()
             await syncAndRefreshPosts(showError: true)
         } catch {
@@ -137,7 +143,7 @@ final class FeedViewModel: ObservableObject {
                 return
             }
 
-            _ = offlineStore.enqueueCreate(body: trimmed)
+            _ = offlineStore.enqueueCreate(body: trimmed, syndication: syndication)
             clearComposerAfterPost()
             posts = offlineStore.displayPosts()
         }
@@ -201,7 +207,7 @@ final class FeedViewModel: ObservableObject {
         }
 
         errorMessage = nil
-        _ = offlineStore.schedulePost(body: trimmed, scheduledAt: scheduledAt)
+        _ = offlineStore.schedulePost(body: trimmed, scheduledAt: scheduledAt, syndication: syndicationChoice)
         clearComposerAfterScheduling()
         refreshScheduledPosts()
         return true
@@ -351,9 +357,10 @@ final class FeedViewModel: ObservableObject {
             do {
                 offlineStore.clearPendingCreateFailure(localId: pendingPost.localId)
                 if let replyToId = pendingPost.replyToId {
+                    // Replies inherit the parent's routing server-side.
                     _ = try await api.createReply(body: pendingPost.body, replyToId: replyToId)
                 } else {
-                    _ = try await api.createPost(body: pendingPost.body)
+                    _ = try await api.createPost(body: pendingPost.body, syndication: pendingPost.syndicationChoice)
                 }
                 offlineStore.removePendingCreate(localId: pendingPost.localId)
             } catch {
@@ -373,7 +380,7 @@ final class FeedViewModel: ObservableObject {
         for scheduledPost in offlineStore.dueScheduledPosts() {
             do {
                 offlineStore.clearScheduledPostFailure(id: scheduledPost.id)
-                _ = try await api.createPost(body: scheduledPost.body)
+                _ = try await api.createPost(body: scheduledPost.body, syndication: scheduledPost.syndicationChoice)
                 offlineStore.removeScheduledPost(id: scheduledPost.id)
             } catch {
                 if error.isOfflineError {

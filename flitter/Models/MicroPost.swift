@@ -7,6 +7,61 @@
 
 import Foundation
 
+/// How a post should be syndicated to the social platforms. `auto` lets the
+/// backend's AI router pick the best platform; `none` keeps the post on the blog
+/// only; the platform cases force exactly that one platform. The `wireValue` is
+/// what gets sent to the API in the `syndication` field.
+enum SyndicationChoice: String, Codable, CaseIterable, Identifiable, Equatable {
+    case auto
+    case none
+    case x
+    case threads
+    case bluesky
+
+    var id: String { rawValue }
+
+    var wireValue: String { rawValue }
+
+    /// Decodes a stored/persisted value, tolerating anything unexpected by
+    /// falling back to `.auto` (e.g. older queued posts saved before this field
+    /// existed, or a value from a future build).
+    static func from(_ raw: String?) -> SyndicationChoice {
+        guard let raw, let choice = SyndicationChoice(rawValue: raw) else { return .auto }
+        return choice
+    }
+
+    /// Full label shown in the routing menu.
+    var menuLabel: String {
+        switch self {
+        case .auto:    return "Auto (let AI pick)"
+        case .none:    return "Don't syndicate"
+        case .x:       return "X"
+        case .threads: return "Threads"
+        case .bluesky: return "Bluesky"
+        }
+    }
+
+    /// Short, glanceable status shown in the composer when not `.auto`.
+    var composerStatusText: String {
+        switch self {
+        case .auto:    return ""
+        case .none:    return "Won't syndicate"
+        case .x:       return "Only on X"
+        case .threads: return "Only on Threads"
+        case .bluesky: return "Only on Bluesky"
+        }
+    }
+
+    /// Icon for the split-button menu trigger; reflects the current state.
+    var triggerSystemImage: String {
+        switch self {
+        case .auto:    return "chevron.down"
+        case .none:    return "nosign"
+        default:       return "arrow.up.forward"
+        }
+    }
+}
+
 struct PlatformPostIds: Codable, Equatable {
     let x: XPostId?
     let threads: ThreadsPostId?

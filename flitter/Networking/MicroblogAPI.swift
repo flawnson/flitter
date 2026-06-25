@@ -80,7 +80,7 @@ final class MicroblogAPI {
         return decoded.posts
     }
 
-    func createPost(body: String, image: UIImage? = nil) async throws -> Int {
+    func createPost(body: String, image: UIImage? = nil, syndication: SyndicationChoice = .auto) async throws -> Int {
         var request = URLRequest(url: AppConfig.baseURL)
         request.httpMethod = "POST"
         request.setValue(AppConfig.adminToken, forHTTPHeaderField: "X-Admin-Token")
@@ -88,10 +88,14 @@ final class MicroblogAPI {
         if let image {
             let boundary = UUID().uuidString
             request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-            request.httpBody = multipartBody(boundary: boundary, fields: [("body", body)], imageData: compressImage(image))
+            request.httpBody = multipartBody(
+                boundary: boundary,
+                fields: [("body", body), ("syndication", syndication.wireValue)],
+                imageData: compressImage(image)
+            )
         } else {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONSerialization.data(withJSONObject: ["body": body])
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["body": body, "syndication": syndication.wireValue])
         }
 
         let session = request.value(forHTTPHeaderField: "Content-Type")?.contains("multipart") == true
