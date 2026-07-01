@@ -282,7 +282,7 @@ struct FeedView: View {
                 Button {
                     viewModel.saveCurrentDraft()
                 } label: {
-                    Label("Save Draft", systemImage: "square.and.arrow.down")
+                    Label("Save", systemImage: "square.and.arrow.down")
                 }
                 .buttonStyle(.bordered)
                 .disabled(
@@ -304,50 +304,73 @@ struct FeedView: View {
                     viewModel.composerText.count > 1000
                 )
 
-                HStack(spacing: 2) {
-                    Button {
-                        Task {
-                            let image = composerImage
-                            composerImage = nil
-                            composerImageItem = nil
-                            await viewModel.submitPost(image: image)
-                            isComposerFocused = false
-                        }
-                    } label: {
-                        if viewModel.isPosting {
-                            ProgressView()
-                        } else {
-                            Text("Post")
-                        }
-                    }
-                    .disabled(
-                        viewModel.isPosting ||
-                        viewModel.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                        viewModel.composerText.count > 1000
-                    )
-
-                    Menu {
-                        Section {
-                            syndicationOption(.auto)
-                            syndicationOption(.none)
-                        }
-                        Section("Force a platform") {
-                            syndicationOption(.x)
-                            syndicationOption(.threads)
-                            syndicationOption(.bluesky)
-                        }
-                    } label: {
-                        Image(systemName: viewModel.syndicationChoice.triggerSystemImage)
-                            .font(.caption.weight(.semibold))
-                    }
-                    .disabled(viewModel.isPosting)
-                    .accessibilityLabel("Syndication options")
-                }
-                .buttonStyle(.borderedProminent)
+                postSplitButton
             }
             .controlSize(.small)
         }
         .padding()
+    }
+
+    private var isPostDisabled: Bool {
+        viewModel.isPosting ||
+        viewModel.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        viewModel.composerText.count > 1000
+    }
+
+    private var postSplitButton: some View {
+        HStack(spacing: 0) {
+            Button {
+                Task {
+                    let image = composerImage
+                    composerImage = nil
+                    composerImageItem = nil
+                    await viewModel.submitPost(image: image)
+                    isComposerFocused = false
+                }
+            } label: {
+                Group {
+                    if viewModel.isPosting {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Text("Post")
+                            .fontWeight(.semibold)
+                    }
+                }
+                .frame(minWidth: 44, minHeight: 30)
+                .padding(.horizontal, 10)
+            }
+            .buttonStyle(.plain)
+            .disabled(isPostDisabled)
+            .opacity(isPostDisabled && !viewModel.isPosting ? 0.55 : 1)
+
+            Rectangle()
+                .fill(Color.white.opacity(0.28))
+                .frame(width: 1, height: 18)
+
+            Menu {
+                Section {
+                    syndicationOption(.auto)
+                    syndicationOption(.none)
+                }
+                Section("Force a platform") {
+                    syndicationOption(.x)
+                    syndicationOption(.threads)
+                    syndicationOption(.bluesky)
+                }
+            } label: {
+                Image(systemName: viewModel.syndicationChoice.triggerSystemImage)
+                    .font(.caption.weight(.bold))
+                    .frame(width: 34, height: 30)
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isPosting)
+            .accessibilityLabel("Syndication options")
+        }
+        .foregroundStyle(.white)
+        .background(Color.accentColor)
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .opacity(viewModel.isPosting ? 0.75 : 1)
     }
 
     /// One row in the routing menu. Shows a checkmark on the current choice so
