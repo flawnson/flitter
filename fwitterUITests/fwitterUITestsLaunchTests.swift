@@ -1,13 +1,13 @@
 //
-//  flitterUITestsLaunchTests.swift
-//  flitterUITests
+//  fwitterUITestsLaunchTests.swift
+//  fwitterUITests
 //
 //  Created by Flawnson Tong on 2026-03-30.
 //
 
 import XCTest
 
-final class flitterUITestsLaunchTests: XCTestCase {
+final class fwitterUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true
