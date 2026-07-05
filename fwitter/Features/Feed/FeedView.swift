@@ -1,6 +1,6 @@
 //
 //  FeedView.swift
-//  flitter
+//  fwitter
 //
 //  Created by Flawnson Tong on 2026-03-30.
 //
@@ -36,18 +36,18 @@ struct FeedView: View {
             .onTapGesture {
                 isComposerFocused = false
             }
-            .navigationTitle("Flitter")
+            .navigationTitle("Fwitter")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 8) {
-                        Image("FlitterLogo")
+                        Image("FwitterLogo")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 22, height: 22)
                             .clipShape(RoundedRectangle(cornerRadius: 5))
 
-                        Text("Flitter")
+                        Text("Fwitter")
                             .font(.headline)
                     }
                 }

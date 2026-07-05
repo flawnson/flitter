@@ -1,6 +1,6 @@
 //
 //  OfflinePostStore.swift
-//  flitter
+//  fwitter
 //
 //  Created by OpenAI on 2026-05-01.
 //
@@ -99,6 +99,7 @@ final class OfflinePostStore {
         static let composerDraft = "offline.composerDraft"
         static let savedDrafts = "offline.savedDrafts"
         static let activeDraftId = "offline.activeDraftId"
+        static let syndicationChoice = "offline.syndicationChoice"
         static let scheduledPosts = "offline.scheduledPosts"
         static let lastUpdatedAt = "offline.lastUpdatedAt"
     }
@@ -161,6 +162,14 @@ final class OfflinePostStore {
         } else {
             defaults.removeObject(forKey: Keys.activeDraftId)
         }
+    }
+
+    func syndicationChoice() -> SyndicationChoice {
+        SyndicationChoice.from(defaults.string(forKey: Keys.syndicationChoice))
+    }
+
+    func saveSyndicationChoice(_ choice: SyndicationChoice) {
+        defaults.set(choice.rawValue, forKey: Keys.syndicationChoice)
     }
 
     func saveDraft(body: String, id: DraftPost.ID? = nil) -> DraftPost {

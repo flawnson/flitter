@@ -1,13 +1,13 @@
 //
-//  flitterUITests.swift
-//  flitterUITests
+//  fwitterUITests.swift
+//  fwitterUITests
 //
 //  Created by Flawnson Tong on 2026-03-30.
 //
 
 import XCTest
 
-final class flitterUITests: XCTestCase {
+final class fwitterUITests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.

@@ -1,20 +1,20 @@
 //
-//  flitterTests.swift
-//  flitterTests
+//  fwitterTests.swift
+//  fwitterTests
 //
 //  Created by Flawnson Tong on 2026-03-30.
 //
 
 import Foundation
 import XCTest
-@testable import flitter
+@testable import fwitter
 
-final class flitterTests: XCTestCase {
+final class fwitterTests: XCTestCase {
     private var defaults: UserDefaults!
     private var defaultsSuiteName: String!
 
     override func setUpWithError() throws {
-        defaultsSuiteName = "flitterTests.\(UUID().uuidString)"
+        defaultsSuiteName = "fwitterTests.\(UUID().uuidString)"
         defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsSuiteName))
         defaults.removePersistentDomain(forName: defaultsSuiteName)
     }

@@ -1,6 +1,6 @@
 //
 //  FeedViewModel.swift
-//  flitter
+//  fwitter
 //
 //  Created by Flawnson Tong on 2026-03-30.
 //
@@ -27,10 +27,14 @@ final class FeedViewModel: ObservableObject {
         }
     }
     @Published var scheduledPosts: [ScheduledPost] = []
-    /// Routing for the next post the composer sends. Resets to `.auto` each
-    /// launch so a "don't syndicate" choice can never silently persist forever;
-    /// the composer surfaces the current value whenever it isn't `.auto`.
-    @Published var syndicationChoice: SyndicationChoice = .auto
+    /// Routing for the next post the composer sends. Persisted across launches
+    /// so the last-selected choice is restored; the composer surfaces the
+    /// current value whenever it isn't `.auto`.
+    @Published var syndicationChoice: SyndicationChoice = .auto {
+        didSet {
+            offlineStore.saveSyndicationChoice(syndicationChoice)
+        }
+    }
     @Published var isLoading = false
     @Published var isPosting = false
     @Published var errorMessage: String?
@@ -84,6 +88,7 @@ final class FeedViewModel: ObservableObject {
         }
 
         composerText = offlineStore.composerDraft()
+        syndicationChoice = offlineStore.syndicationChoice()
         updateLastUpdatedText()
 
         if startsNetworkMonitor {
