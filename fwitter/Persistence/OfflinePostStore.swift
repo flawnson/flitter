@@ -169,7 +169,7 @@ final class OfflinePostStore {
     }
 
     func saveSyndicationChoice(_ choice: SyndicationChoice) {
-        defaults.set(choice.rawValue, forKey: Keys.syndicationChoice)
+        defaults.set(choice.wireValue, forKey: Keys.syndicationChoice)
     }
 
     func saveDraft(body: String, id: DraftPost.ID? = nil) -> DraftPost {

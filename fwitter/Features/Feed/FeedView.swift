@@ -268,11 +268,9 @@ struct FeedView: View {
                         if let data = try? await item.loadTransferable(type: Data.self),
                            let image = UIImage(data: data) {
                             composerImage = image
-                            // Threads can't carry a photo; drop the forced choice
-                            // back to Auto so we never try to route an image there.
-                            if viewModel.syndicationChoice == .threads {
-                                viewModel.syndicationChoice = .auto
-                            }
+                            // Threads can't carry a photo; drop it from the forced
+                            // set so we never try to route an image there.
+                            viewModel.syndicationChoice = viewModel.syndicationChoice.removing(.threads)
                         }
                     }
                 }
@@ -350,13 +348,13 @@ struct FeedView: View {
 
             Menu {
                 Section {
-                    syndicationOption(.auto)
-                    syndicationOption(.none)
+                    syndicationModeOption(.auto, label: "Auto (let AI pick)")
+                    syndicationModeOption(.none, label: "Don't syndicate")
                 }
-                Section("Force a platform") {
-                    syndicationOption(.x)
-                    syndicationOption(.threads)
-                    syndicationOption(.bluesky)
+                Section("Choose platforms") {
+                    ForEach(SyndicationPlatform.allCases) { platform in
+                        syndicationPlatformToggle(platform)
+                    }
                 }
             } label: {
                 Image(systemName: viewModel.syndicationChoice.triggerSystemImage)
@@ -373,22 +371,37 @@ struct FeedView: View {
         .opacity(viewModel.isPosting ? 0.75 : 1)
     }
 
-    /// One row in the routing menu. Shows a checkmark on the current choice so
-    /// the flat list behaves like a single-select (radio) group. Threads is
-    /// disabled while a photo is attached, since Threads syndication is
-    /// text-only.
-    @ViewBuilder
-    private func syndicationOption(_ choice: SyndicationChoice) -> some View {
-        let isDisabled = choice == .threads && composerImage != nil
+    /// A mode row in the routing menu (`Auto` / `Don't syndicate`). Selecting a
+    /// mode replaces any platform selection, so the modes behave like a radio
+    /// group above the platform toggles.
+    private func syndicationModeOption(_ choice: SyndicationChoice, label: String) -> some View {
         Button {
             viewModel.syndicationChoice = choice
         } label: {
             if viewModel.syndicationChoice == choice {
-                Label(choice.menuLabel, systemImage: "checkmark")
-            } else if isDisabled {
-                Text("\(choice.menuLabel) (no photos)")
+                Label(label, systemImage: "checkmark")
             } else {
-                Text(choice.menuLabel)
+                Text(label)
+            }
+        }
+    }
+
+    /// A platform row in the routing menu. Platforms multi-select: tapping one
+    /// toggles it in or out of the forced set, and clearing the last one falls
+    /// back to Auto. Threads is disabled while a photo is attached, since
+    /// Threads syndication is text-only.
+    @ViewBuilder
+    private func syndicationPlatformToggle(_ platform: SyndicationPlatform) -> some View {
+        let isDisabled = platform == .threads && composerImage != nil
+        Button {
+            viewModel.syndicationChoice = viewModel.syndicationChoice.toggling(platform)
+        } label: {
+            if viewModel.syndicationChoice.contains(platform) {
+                Label(platform.displayName, systemImage: "checkmark")
+            } else if isDisabled {
+                Text("\(platform.displayName) (no photos)")
+            } else {
+                Text(platform.displayName)
             }
         }
         .disabled(isDisabled)
