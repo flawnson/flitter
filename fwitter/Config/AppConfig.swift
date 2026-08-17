@@ -9,5 +9,7 @@ import Foundation
 
 enum AppConfig {
     static let baseURL = URL(string: "https://flawnson.com/api/micro-posts.php")!
-    static let adminToken = "***REMOVED***"
+    // The real token lives in Secrets.swift, which is gitignored because this
+    // repo is public. See the header comment there for how to recreate it.
+    static let adminToken = Secrets.adminToken
 }
